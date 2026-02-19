@@ -100,8 +100,12 @@ class ScalpelStrategy(BaseStrategy):
             close=df["Close"],
             window=16,
         ).average_true_range()
-        df["EMA_slow"] = EMAIndicator(close=df["Close"], window=50).ema_indicator()
-        df["EMA_fast"] = EMAIndicator(close=df["Close"], window=20).ema_indicator()
+        df["EMA_slow"] = EMAIndicator(
+            close=df["Close"], window=self.config.ema_slow_window
+        ).ema_indicator()
+        df["EMA_fast"] = EMAIndicator(
+            close=df["Close"], window=self.config.ema_fast_window
+        ).ema_indicator()
         return df
 
     async def add_signal(self, df: DataFrame):
@@ -257,6 +261,10 @@ class ScalpelStrategy(BaseStrategy):
         ).instrument
 
     async def main_cycle(self):
+        if self.config.ema_fast_window >= self.config.ema_slow_window:
+            raise ValueError(
+                "Invalid EMA configuration: ema_fast_window must be less than ema_slow_window"
+            )
         await self.prepare_data()
         logger.info(
             f"Starting scalpel strategy for figi={self.figi}"

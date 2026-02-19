@@ -6,8 +6,11 @@
         "name": "scalpel",
         "parameters": {
           "days_back_to_consider": 1,
+          "stop_loss_percent": 0.05,
           "quantity_limit": 10,
-          "check_data": 60
+          "check_data": 60,
+          "ema_fast_window": 20,
+          "ema_slow_window": 45
         }
       }
     }

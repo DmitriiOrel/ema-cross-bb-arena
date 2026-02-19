@@ -6,3 +6,5 @@ class ScalpelStrategyConfig(BaseModel):
     stop_loss_percent: float = Field(0.05, ge=0.0, le=1.0)
     quantity_limit: int = Field(1, ge=0)
     check_data: int = Field(60, g=0)
+    ema_fast_window: int = Field(20, gt=0)
+    ema_slow_window: int = Field(50, gt=0)
