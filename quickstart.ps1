@@ -88,14 +88,14 @@ Invoke-External -Executable $pythonExe -Arguments @(
 Invoke-External -Executable $pythonExe -Arguments @(
     "-m", "pip", "install",
     "--index-url", "https://pypi.org/simple",
-    "--no-deps",
-    "git+https://github.com/RussianInvestments/invest-python.git@0.2.0-beta97"
-) -StepName "Install T-Invest SDK"
+    "-r", "requirements.txt"
+) -StepName "Install project dependencies"
 Invoke-External -Executable $pythonExe -Arguments @(
     "-m", "pip", "install",
     "--index-url", "https://pypi.org/simple",
-    "-r", "requirements.txt"
-) -StepName "Install project dependencies"
+    "--no-deps",
+    "git+https://github.com/RussianInvestments/invest-python.git@0.2.0-beta97"
+) -StepName "Install T-Invest SDK"
 Invoke-External -Executable $pythonExe -Arguments @("-c", "import tinkoff.invest") -StepName "Validate tinkoff SDK import"
 
 if (-not (Test-Path ".env")) {
