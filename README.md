@@ -1,6 +1,6 @@
 # TradeSavvy Sandbox Starter
 
-Minimal training project to run a trading bot in T-Invest Sandbox.
+Учебный репозиторий для запуска торгового бота в песочнице T-Invest, проведения бэктестов и ведения общего лидерборда на GitHub.
 
 <!-- LEADERBOARD:START -->
 ## Актуальный Лидерборд
@@ -16,81 +16,80 @@ Minimal training project to run a trading bot in T-Invest Sandbox.
 
 <!-- LEADERBOARD:END -->
 
-## Quick Start (Windows PowerShell)
+## Быстрый Старт (Windows PowerShell)
 
 ```powershell
 git clone https://github.com/DmitriiOrel/winter_school_project.git
 cd .\winter_school_project
-.\quickstart.ps1 -Token "t.YOUR_API_TOKEN" -Run
+.\quickstart.ps1 -Token "t.ВАШ_API_ТОКЕН"
 ```
 
-Token format: use the raw token only (`t.xxxxx`).
-Do not wrap token with `< >`.
+Токен указывается в сыром виде: `t.xxxxx` (без `< >` и без пробелов).
 
-## What quickstart does
+## Что Делает quickstart
 
-- Creates `.venv`
-- Installs dependencies
-- Installs T-Invest SDK (`tinkoff.invest`)
-- Creates/finds sandbox account
-- Writes `.env` with `TOKEN`, `ACCOUNT_ID`, `SANDBOX=True`
+- создает `.venv`;
+- устанавливает зависимости;
+- устанавливает SDK T-Invest (`tinkoff.invest`);
+- создает или находит sandbox-счет;
+- записывает `.env` с полями `TOKEN`, `ACCOUNT_ID`, `SANDBOX=True`.
 
-## Run later
+## Единый Сценарий Запуска
+
+В проекте используется один основной скрипт: `run_backtest_manual.ps1`.
+
+Скрипт выполняет полный цикл:
+1. ручной бэктест за 3 года;
+2. обновление лидерборда в GitHub (режим `best-only`: сохраняется только лучший результат участника);
+3. обновление таблицы лидерборда в `README.md`;
+4. сохранение артефактов trial в `reports/<user>/trial_<run_id>`;
+5. обязательный запуск sandbox-бота.
+
+### Команда запуска
 
 ```powershell
-.\run_sandbox.ps1
+$env:GITHUB_TOKEN="github_pat_ВАШ_PAT"
+.\run_backtest_manual.ps1 20 50 20 2.0 60 -Name dmitrii
 ```
 
-Stop: `Ctrl+C`.
+Порядок параметров:
+- `ema_fast` в диапазоне `8..30`;
+- `ema_slow` в диапазоне `35..120`, при этом `ema_fast < ema_slow`;
+- `bb_window` в диапазоне `10..40`;
+- `bb_dev` в диапазоне `1.0..3.5` с шагом `0.25`;
+- `timeframe_min` один из: `5, 15, 30, 60, 120, 240, 720, 1440`.
 
-## Manual Backtest + Leaderboard + Run Sandbox
+## Структура Артефактов
 
-Run with manual params (space-separated):
+### Лидерборд
+
+- Основной файл лидерборда в GitHub: `reports/leaderboard.json`.
+- Формат: JSON-массив записей.
+- Логика отбора: `best-only` по полю участника `name`.
+
+### Артефакты участника
+
+Для каждого участника формируется папка:
+- `reports/<user>/trials_index.json` — индекс запусков, отсортированный по доходности;
+- `reports/<user>/trial_<run_id>/summary.json` — параметры и метрики стратегии;
+- `reports/<user>/trial_<run_id>/backtest.png` — график бэктеста;
+- `reports/<user>/trial_<run_id>/trades.csv` — журнал сделок.
+
+## Требования к GitHub
+
+Для публикации нужен GitHub PAT с правами:
+- репозиторий: `DmitriiOrel/winter_school_project`;
+- permission: `Contents: Read and write`.
+
+Логин/пароль GitHub не поддерживаются.
+
+## Если Скрипты Блокируются Политикой ExecutionPolicy
 
 ```powershell
-$env:GITHUB_TOKEN="ghp_your_pat"
-.\run_backtest_manual.ps1 20 50 20 2.0 60 -Name dima
+powershell -ExecutionPolicy Bypass -File .\quickstart.ps1 -Token "t.ВАШ_API_ТОКЕН"
 ```
 
-Params order:
-- `ema_fast` in `8..30`
-- `ema_slow` in `35..120` and `ema_fast < ema_slow`
-- `bb_window` in `10..40`
-- `bb_dev` in `1.0..3.5` (step `0.25`)
-- `timeframe_min` in `5, 15, 30, 60, 120, 240, 720, 1440`
+## Примечания
 
-Artifacts are saved into `reports/`:
-- `reports/scalpel_backtest_plot.png`
-- `reports/leaderboard.csv` (local mirror of GitHub leaderboard)
-- `reports/trades_<name>_<run_id>.csv`
-- `reports/summary_<name>_<run_id>.json`
-
-The script:
-- runs backtest for last 3 years (`1095` days);
-- shows entry/exit points on chart;
-- prints your leaderboard place in terminal;
-- updates leaderboard on GitHub (required);
-- updates leaderboard section in `README.md` on GitHub;
-- keeps only one best result per participant name (`-Name`);
-- writes selected EMA params into `instruments_config_scalpel.json`;
-- starts sandbox bot.
-
-GitHub leaderboard publish (mandatory):
-- requires GitHub PAT (GitHub login/password is not supported);
-- pass token as `-GitHubToken "<PAT>"` or set env `GITHUB_TOKEN` (recommended);
-- target file by default: `DmitriiOrel/winter_school_project` -> `reports/leaderboard.csv`.
-
-Useful flags:
-- `-NoSandboxRun` - run only backtest + leaderboard.
-- `-NoChartOpen` - do not auto-open chart window.
-
-## If script execution is blocked
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\quickstart.ps1 -Token "t.YOUR_API_TOKEN" -Run
-```
-
-## Notes
-
-- Sandbox only (`SANDBOX=True`): virtual trades.
-- Do not commit `.env`, `stats.db`, `market_data_cache`, `reports`.
+- Режим торговли: только песочница (`SANDBOX=True`).
+- Не коммитьте `.env`, `market_data_cache`, `stats.db`.

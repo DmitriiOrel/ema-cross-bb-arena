@@ -57,7 +57,7 @@ if ($Token.StartsWith("t.<") -and $Token.EndsWith(">")) {
     }
 }
 if (-not $Token.StartsWith("t.")) {
-    throw "Token format looks invalid. Use raw token like t.xxxxx (without < >)."
+    throw "Token format is invalid. Use raw token like t.xxxxx (without < >)."
 }
 
 if (-not (Get-Command py -ErrorAction SilentlyContinue)) {
@@ -140,8 +140,13 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host ""
 Write-Host "Setup complete."
 Write-Host "ACCOUNT_ID written to .env."
-Write-Host "Run bot: .\\run_sandbox.ps1"
+Write-Host "Main run command:"
+Write-Host '$env:GITHUB_TOKEN="github_pat_YOUR_PAT"'
+Write-Host ".\\run_backtest_manual.ps1"
 
 if ($Run) {
-    & ".\\run_sandbox.ps1"
+    if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+        throw "For -Run mode, set GITHUB_TOKEN (GitHub PAT) first."
+    }
+    & ".\\run_backtest_manual.ps1"
 }

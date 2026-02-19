@@ -12,9 +12,8 @@ param(
     [string]$Name,
     [string]$GitHubOwner = "DmitriiOrel",
     [string]$GitHubRepo = "winter_school_project",
-    [string]$GitHubPath = "reports/leaderboard.csv",
+    [string]$GitHubPath = "reports/leaderboard.json",
     [string]$GitHubToken = "",
-    [switch]$NoSandboxRun,
     [switch]$NoChartOpen
 )
 
@@ -66,13 +65,13 @@ if (-not $PSBoundParameters.ContainsKey("EmaSlow")) { $EmaSlow = [int](Read-Host
 if (-not $PSBoundParameters.ContainsKey("BbWindow")) { $BbWindow = [int](Read-Host "bb_window (10..40)") }
 if (-not $PSBoundParameters.ContainsKey("BbDev")) { $BbDev = [double](Read-Host "bb_dev (1.0..3.5, step 0.25)") }
 if (-not $PSBoundParameters.ContainsKey("TimeframeMin")) { $TimeframeMin = [int](Read-Host "timeframe_min (5,15,30,60,120,240,720,1440)") }
-$Name = Prompt-IfMissing -Value $Name -Prompt "name/login for leaderboard"
+$Name = Prompt-IfMissing -Value $Name -Prompt "participant name for leaderboard"
 
-if ($EmaFast -lt 8 -or $EmaFast -gt 30) { throw "ema_fast must be in 8..30" }
-if ($EmaSlow -lt 35 -or $EmaSlow -gt 120) { throw "ema_slow must be in 35..120" }
-if ($EmaFast -ge $EmaSlow) { throw "ema_fast must be less than ema_slow" }
-if ($BbWindow -lt 10 -or $BbWindow -gt 40) { throw "bb_window must be in 10..40" }
-if ($BbDev -lt 1.0 -or $BbDev -gt 3.5) { throw "bb_dev must be in 1.0..3.5" }
+if ($EmaFast -lt 8 -or $EmaFast -gt 30) { throw "ema_fast must be in range 8..30" }
+if ($EmaSlow -lt 35 -or $EmaSlow -gt 120) { throw "ema_slow must be in range 35..120" }
+if ($EmaFast -ge $EmaSlow) { throw "Constraint failed: ema_fast < ema_slow" }
+if ($BbWindow -lt 10 -or $BbWindow -gt 40) { throw "bb_window must be in range 10..40" }
+if ($BbDev -lt 1.0 -or $BbDev -gt 3.5) { throw "bb_dev must be in range 1.0..3.5" }
 $scaledDev = [int][Math]::Round($BbDev * 100)
 if (($scaledDev % 25) -ne 0) { throw "bb_dev step must be 0.25" }
 $allowedTf = @(5, 15, 30, 60, 120, 240, 720, 1440)
@@ -82,7 +81,7 @@ if ([string]::IsNullOrWhiteSpace($GitHubToken) -and -not [string]::IsNullOrWhite
     $GitHubToken = $env:GITHUB_TOKEN
 }
 if ([string]::IsNullOrWhiteSpace($GitHubToken)) {
-    throw "GitHub PAT is required for leaderboard update. Pass -GitHubToken <PAT> or set GITHUB_TOKEN."
+    throw "GitHub PAT is required. Pass -GitHubToken <PAT> or set GITHUB_TOKEN."
 }
 
 $pythonExe = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
@@ -115,8 +114,8 @@ $argsList = @(
     "--github-token", "$GitHubToken"
 )
 
-Write-Host "Running manual backtest (3 years) and leaderboard update..."
-Invoke-External -Executable $pythonExe -Arguments $argsList -StepName "Manual backtest leaderboard"
+Write-Host "Running backtest (3 years) and updating GitHub leaderboard..."
+Invoke-External -Executable $pythonExe -Arguments $argsList -StepName "Manual backtest + leaderboard update"
 
 if (-not $NoChartOpen) {
     $plotPath = Join-Path $PSScriptRoot "reports\scalpel_backtest_plot.png"
@@ -125,7 +124,5 @@ if (-not $NoChartOpen) {
     }
 }
 
-if (-not $NoSandboxRun) {
-    Write-Host "Starting sandbox bot with selected EMA. Press Ctrl+C to stop."
-    & ".\run_sandbox.ps1"
-}
+Write-Host "Starting sandbox bot with selected parameters. Stop: Ctrl+C."
+Invoke-External -Executable $pythonExe -Arguments @(".\app\main.py") -StepName "Sandbox bot run"
