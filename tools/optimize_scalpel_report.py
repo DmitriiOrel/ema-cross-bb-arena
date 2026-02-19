@@ -75,6 +75,10 @@ def load_instrument_params(config_path: Path) -> tuple[str, dict]:
 def fetch_candles(figi: str, days_back: int) -> pd.DataFrame:
     target = INVEST_GRPC_API_SANDBOX if settings.sandbox else INVEST_GRPC_API
     candles = []
+    print(
+        f"Fetching candles from API for figi={figi}, days_back={days_back}, interval=5min...",
+        flush=True,
+    )
     with Client(settings.token, target=target) as client:
         for candle in client.get_all_candles(
             figi=figi,
@@ -92,6 +96,8 @@ def fetch_candles(figi: str, days_back: int) -> pd.DataFrame:
                     "Volume": candle.volume,
                 }
             )
+            if len(candles) % 1000 == 0:
+                print(f"Fetched candles: {len(candles)}", flush=True)
     if not candles:
         raise ValueError("No candles returned from API")
     df = pd.DataFrame(candles)
@@ -365,7 +371,18 @@ def main() -> None:
     fast_values = list(range(args.fast_start, args.fast_end + 1, args.fast_step))
     slow_values = list(range(args.slow_start, args.slow_end + 1, args.slow_step))
 
+    print("Starting backtest pipeline...", flush=True)
+    print(
+        (
+            f"EMA fast range: {args.fast_start}..{args.fast_end} step {args.fast_step}; "
+            f"EMA slow range: {args.slow_start}..{args.slow_end} step {args.slow_step}; "
+            f"backcandles={args.backcandles}"
+        ),
+        flush=True,
+    )
+
     base_df = fetch_candles(figi=figi, days_back=args.days_back)
+    print(f"Total candles fetched: {len(base_df)}", flush=True)
     required_len = max(slow_values) + args.backcandles + 5
     if len(base_df) < required_len:
         raise ValueError(
@@ -395,6 +412,7 @@ def main() -> None:
     if not results:
         raise ValueError("EMA sweep returned no valid combinations")
 
+    print("Sweep complete. Selecting best EMA pair...", flush=True)
     results_df = pd.DataFrame(results)
     results_df.sort_values(by="cagr", ascending=False, inplace=True)
     grid_path = output_dir / "ema_grid_results.csv"

@@ -54,7 +54,9 @@ $env:PYTHONPATH = "."
 $env:PYTHONDONTWRITEBYTECODE = "1"
 Clear-NetworkEnv
 
+Write-Host "[1/2] Running backtest + EMA sweep. This may take several minutes for 2 years of data..."
 Invoke-External -Executable $pythonExe -Arguments @(
+    "-u",
     ".\tools\optimize_scalpel_report.py",
     "--days-back", "$DaysBack",
     "--fast-start", "$FastStart",
@@ -69,5 +71,6 @@ Invoke-External -Executable $pythonExe -Arguments @(
 ) -StepName "Run EMA sweep backtest and build report"
 
 if (-not $SkipSandboxRun) {
+    Write-Host "[2/2] Starting sandbox bot (continuous run). Press Ctrl+C to stop."
     & ".\run_sandbox.ps1"
 }
