@@ -47,6 +47,7 @@ What it does:
   - number of trades;
   - average annual return (CAGR);
 - writes selected EMA params into `instruments_config_scalpel.json`;
+- opens chart automatically after backtest;
 - starts sandbox bot with selected EMA.
 
 Artifacts are saved into `reports/`:
@@ -54,6 +55,10 @@ Artifacts are saved into `reports/`:
 - `reports/ema_grid_results.csv`
 - `reports/best_trades.csv`
 - `reports/backtest_summary.json`
+
+Useful flags:
+- `-SkipSandboxRun` - run only backtest/sweep/report.
+- `-SkipReportOpen` - do not auto-open chart window.
 
 ## If script execution is blocked
 

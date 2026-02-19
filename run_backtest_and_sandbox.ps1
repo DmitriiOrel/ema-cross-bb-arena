@@ -8,7 +8,8 @@ param(
     [int]$SlowStep = 5,
     [int]$Backcandles = 15,
     [double]$InitialCapital = 100000,
-    [switch]$SkipSandboxRun
+    [switch]$SkipSandboxRun,
+    [switch]$SkipReportOpen
 )
 
 $ErrorActionPreference = "Stop"
@@ -69,6 +70,17 @@ Invoke-External -Executable $pythonExe -Arguments @(
     "--initial-capital", "$InitialCapital",
     "--write-live-config"
 ) -StepName "Run EMA sweep backtest and build report"
+
+if (-not $SkipReportOpen) {
+    $plotPath = Join-Path $PSScriptRoot "reports\scalpel_backtest_plot.png"
+    if (Test-Path $plotPath) {
+        Write-Host "[report] Opening backtest chart..."
+        Start-Process $plotPath | Out-Null
+    }
+    else {
+        Write-Host "[report] Chart file was not found: $plotPath"
+    }
+}
 
 if (-not $SkipSandboxRun) {
     Write-Host "[2/2] Starting sandbox bot (continuous run). Press Ctrl+C to stop."
