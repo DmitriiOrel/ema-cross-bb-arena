@@ -81,6 +81,9 @@ if ($TimeframeMin -notin $allowedTf) { throw "timeframe_min must be one of: 5, 1
 if ([string]::IsNullOrWhiteSpace($GitHubToken) -and -not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
     $GitHubToken = $env:GITHUB_TOKEN
 }
+if ([string]::IsNullOrWhiteSpace($GitHubToken)) {
+    throw "GitHub PAT is required for leaderboard update. Pass -GitHubToken <PAT> or set GITHUB_TOKEN."
+}
 
 $pythonExe = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $pythonExe)) {
@@ -105,16 +108,12 @@ $argsList = @(
     "--timeframe-min", "$TimeframeMin",
     "--days-back", "1095",
     "--write-live-config",
+    "--require-github",
     "--github-owner", "$GitHubOwner",
     "--github-repo", "$GitHubRepo",
-    "--github-path", "$GitHubPath"
+    "--github-path", "$GitHubPath",
+    "--github-token", "$GitHubToken"
 )
-if (-not [string]::IsNullOrWhiteSpace($GitHubToken)) {
-    $argsList += @("--github-token", "$GitHubToken")
-}
-else {
-    Write-Host "GitHub publish disabled (no PAT provided). Local leaderboard will still be updated."
-}
 
 Write-Host "Running manual backtest (3 years) and leaderboard update..."
 Invoke-External -Executable $pythonExe -Arguments $argsList -StepName "Manual backtest leaderboard"

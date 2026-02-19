@@ -34,6 +34,7 @@ Stop: `Ctrl+C`.
 Run with manual params (space-separated):
 
 ```powershell
+$env:GITHUB_TOKEN="ghp_your_pat"
 .\run_backtest_manual.ps1 20 50 20 2.0 60 -Name dima
 ```
 
@@ -46,7 +47,7 @@ Params order:
 
 Artifacts are saved into `reports/`:
 - `reports/scalpel_backtest_plot.png`
-- `reports/leaderboard.csv`
+- `reports/leaderboard.csv` (local mirror of GitHub leaderboard)
 - `reports/trades_<name>_<run_id>.csv`
 - `reports/summary_<name>_<run_id>.json`
 
@@ -54,13 +55,13 @@ The script:
 - runs backtest for last 3 years (`1095` days);
 - shows entry/exit points on chart;
 - prints your leaderboard place in terminal;
-- updates local leaderboard table;
+- updates leaderboard on GitHub (required);
 - writes selected EMA params into `instruments_config_scalpel.json`;
 - starts sandbox bot.
 
-GitHub leaderboard publish:
-- requires GitHub PAT (without auth GitHub cannot be updated);
-- pass token as `-GitHubToken "<PAT>"` or set env `GITHUB_TOKEN`;
+GitHub leaderboard publish (mandatory):
+- requires GitHub PAT (GitHub login/password is not supported);
+- pass token as `-GitHubToken "<PAT>"` or set env `GITHUB_TOKEN` (recommended);
 - target file by default: `DmitriiOrel/winter_school_project` -> `reports/leaderboard.csv`.
 
 Useful flags:

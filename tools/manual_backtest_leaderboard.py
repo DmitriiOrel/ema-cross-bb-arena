@@ -2,6 +2,7 @@ import argparse
 import base64
 import io
 import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -81,7 +82,7 @@ class BacktestResult:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Manual backtest for leaderboard with chart and optional GitHub publish."
+        description="Manual backtest for leaderboard with chart and required GitHub publish."
     )
     parser.add_argument("--name", required=True)
     parser.add_argument("--ema-fast", type=int, required=True)
@@ -101,6 +102,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--github-path", default="reports/leaderboard.csv")
     parser.add_argument("--github-branch", default="main")
     parser.add_argument("--github-token", default="")
+    parser.add_argument("--require-github", action="store_true")
     parser.add_argument("--table-limit", type=int, default=20)
     return parser.parse_args()
 
@@ -483,6 +485,15 @@ def print_leaderboard(df: pd.DataFrame, table_limit: int) -> None:
 def main() -> None:
     args = parse_args()
     ensure_valid_params(args)
+    if not args.require_github:
+        raise ValueError("Local leaderboard mode is disabled. Run with --require-github.")
+    if not args.github_token:
+        args.github_token = os.getenv("GITHUB_TOKEN", "")
+    if not args.github_owner or not args.github_repo or not args.github_token:
+        raise ValueError(
+            "GitHub leaderboard requires --github-owner, --github-repo and --github-token "
+            "(or GITHUB_TOKEN env variable)."
+        )
 
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -561,43 +572,34 @@ def main() -> None:
         "run_id": run_id,
     }
 
-    local_df = ensure_leaderboard_columns(load_local_leaderboard(args.leaderboard_path))
-    if local_df.empty:
-        local_df = pd.DataFrame([record], columns=LEADERBOARD_COLUMNS)
-    else:
-        local_df = pd.concat([local_df, pd.DataFrame([record])], ignore_index=True)
-    ranked = rank_leaderboard(local_df)
+    try:
+        remote_df, remote_sha = fetch_remote_leaderboard(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path=args.github_path,
+            branch=args.github_branch,
+            token=args.github_token,
+        )
+        remote_df = ensure_leaderboard_columns(remote_df)
+        if remote_df.empty:
+            merged = pd.DataFrame([record], columns=LEADERBOARD_COLUMNS)
+        else:
+            merged = pd.concat([remote_df, pd.DataFrame([record])], ignore_index=True)
+        ranked = rank_leaderboard(merged)
+        push_remote_leaderboard(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path=args.github_path,
+            branch=args.github_branch,
+            token=args.github_token,
+            df=ranked,
+            sha=remote_sha,
+            message=f"Update leaderboard: {safe_name} {run_id}",
+        )
+    except Exception as ex:
+        raise RuntimeError(f"GitHub leaderboard update failed: {ex}") from ex
 
-    published_to_github = False
-    if args.github_token and args.github_owner and args.github_repo:
-        try:
-            remote_df, remote_sha = fetch_remote_leaderboard(
-                owner=args.github_owner,
-                repo=args.github_repo,
-                path=args.github_path,
-                branch=args.github_branch,
-                token=args.github_token,
-            )
-            remote_df = ensure_leaderboard_columns(remote_df)
-            if remote_df.empty:
-                merged = pd.DataFrame([record], columns=LEADERBOARD_COLUMNS)
-            else:
-                merged = pd.concat([remote_df, pd.DataFrame([record])], ignore_index=True)
-            ranked = rank_leaderboard(merged)
-            push_remote_leaderboard(
-                owner=args.github_owner,
-                repo=args.github_repo,
-                path=args.github_path,
-                branch=args.github_branch,
-                token=args.github_token,
-                df=ranked,
-                sha=remote_sha,
-                message=f"Update leaderboard: {safe_name} {run_id}",
-            )
-            published_to_github = True
-        except Exception as ex:
-            print(f"GitHub publish failed: {ex}", flush=True)
-
+    # Keep a local mirror for convenience, but source of truth is GitHub.
     save_local_leaderboard(ranked, args.leaderboard_path)
 
     my_row = ranked[ranked["run_id"] == run_id]
@@ -617,7 +619,7 @@ def main() -> None:
     print(f"Your leaderboard place: {my_place}")
     print(f"Latest plot: {latest_plot}")
     print(f"Leaderboard file: {args.leaderboard_path}")
-    print(f"Published to GitHub: {'yes' if published_to_github else 'no'}")
+    print("Published to GitHub: yes")
 
     print_leaderboard(ranked, args.table_limit)
 
