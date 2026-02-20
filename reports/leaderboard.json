@@ -15,22 +15,5 @@
     "figi": "BBG004730N88",
     "timestamp_utc": "20260219T113648Z",
     "run_id": "20260219T113648Z"
-  },
-  {
-    "place": 2,
-    "name": "dispatch_smoke",
-    "annual_return_pct": 11.11,
-    "ema_fast": 20,
-    "ema_slow": 50,
-    "bb_window": 20,
-    "bb_dev": 2,
-    "timeframe_min": 60,
-    "max_drawdown_pct": -7.77,
-    "trades": 33,
-    "total_return_pct": 22.22,
-    "days_back": 365,
-    "figi": "BBG004730N88",
-    "timestamp_utc": "20260220T123500Z",
-    "run_id": "20260220T123500Z"
   }
 ]
