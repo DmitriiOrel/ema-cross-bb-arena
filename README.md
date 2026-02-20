@@ -1,6 +1,7 @@
-﻿# MarketLab Arena
+﻿# EMA Cross BB Arena
 
-Учебный репозиторий для бэктеста и запуска торговой стратегии в T-Invest Sandbox с общим лидербордом.
+Учебный репозиторий для бэктеста и запуска стратегии в T-Invest Sandbox.
+Сигнал построен строго на пересечении EMA и выходе цены за полосы Боллинджера.
 
 <!-- LEADERBOARD:START -->
 ## Актуальный Лидерборд
@@ -16,8 +17,8 @@
 ## Быстрый старт (Windows PowerShell)
 
 ```powershell
-git clone https://github.com/DmitriiOrel/marketlab-arena.git
-cd .\marketlab-arena
+git clone https://github.com/DmitriiOrel/ema-cross-bb-arena.git
+cd .\ema-cross-bb-arena
 .\quickstart.ps1 -Token "t.ВАШ_TINVEST_TOKEN"
 ```
 
@@ -25,21 +26,35 @@ cd .\marketlab-arena
 
 ```powershell
 $env:GITHUB_TOKEN="github_pat_ВАШ_GITHUB_PAT"
-.\run_backtest_manual.ps1 20 50 20 2.0 60 -Name ivan
+.\run_backtest_manual.ps1 30 40 20 1.0 60 -Name ivan
 ```
 
-## Что изменено для нагрузки до 100 участников
+## Логика сигнала (EMA crossover + Bollinger breakout)
 
-- Клиентский скрипт больше не редактирует `README.md` и `reports/leaderboard.json` напрямую.
-- Клиент отправляет `repository_dispatch` событие в GitHub.
-- Обновление лидерборда выполняет GitHub Action в одном потоке (`concurrency`), поэтому нет гонок записи.
-- В `run_backtest_manual.ps1` добавлен случайный стартовый джиттер (`StartJitterSec`) для сглаживания пиков к API.
-- По умолчанию бэктест запускается на `DaysBack=365` (можно увеличить параметром).
+Параметры `30 40 20 1.0 60` означают:
+- `EMA_fast = 30`
+- `EMA_slow = 40`
+- `BB window = 20`
+- `BB dev = 1.0`
+- `timeframe = 60` минут
 
-## Важное ограничение
+Правила:
+- `BUY`: быстрая EMA пересекает медленную **снизу вверх** на текущей свече, и цена закрытия **выше верхней** полосы Боллинджера.
+- `SELL`: быстрая EMA пересекает медленную **сверху вниз** на текущей свече, и цена закрытия **ниже нижней** полосы Боллинджера.
 
-Для масштабирования до 100 человек каждый участник должен использовать **свой T-Invest токен**.
-Один общий токен T-Invest при массовом параллельном запуске упирается в лимиты API.
+Стратегия рассматривает только случаи, когда цена вышла за границы полос Боллинджера с заданным стандартным отклонением (`bb_dev`).
+
+## Масштабирование до 100 участников
+
+- Клиентский скрипт не редактирует `README.md`/`reports/leaderboard.json` напрямую.
+- Клиент отправляет `repository_dispatch` в GitHub.
+- Лидерборд обновляет GitHub Action в одном потоке (`concurrency`), без гонок записи.
+- В `run_backtest_manual.ps1` есть стартовый джиттер (`StartJitterSec`) и `DaysBack` (по умолчанию `365`) для снижения нагрузки на API.
+
+## Ограничение
+
+Для нагрузки в 100 человек каждому участнику нужен **свой T-Invest токен**.
+Один общий токен упрется в лимиты API.
 
 ## Основные файлы
 

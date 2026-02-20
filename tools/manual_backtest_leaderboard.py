@@ -244,20 +244,22 @@ def add_signals(df: pd.DataFrame, ema_fast: int, ema_slow: int, bb_window: int, 
     out["EMA_slow"] = EMAIndicator(close=out["Close"], window=ema_slow).ema_indicator()
 
     bbands = BollingerBands(close=out["Close"], window=bb_window, window_dev=bb_dev)
-    out["bbihband"] = bbands.bollinger_hband_indicator()
-    out["bbilband"] = bbands.bollinger_lband_indicator()
+    out["bb_upper"] = bbands.bollinger_hband()
+    out["bb_lower"] = bbands.bollinger_lband()
 
-    above = out["EMA_fast"] > out["EMA_slow"]
-    below = out["EMA_fast"] < out["EMA_slow"]
-    above_all = above.rolling(window=backcandles).apply(lambda x: x.all(), raw=True).fillna(0).astype(bool)
-    below_all = below.rolling(window=backcandles).apply(lambda x: x.all(), raw=True).fillna(0).astype(bool)
+    prev_fast = out["EMA_fast"].shift(1)
+    prev_slow = out["EMA_slow"].shift(1)
+    cross_up = (prev_fast <= prev_slow) & (out["EMA_fast"] > out["EMA_slow"])
+    cross_down = (prev_fast >= prev_slow) & (out["EMA_fast"] < out["EMA_slow"])
+    price_above_upper = out["Close"] > out["bb_upper"]
+    price_below_lower = out["Close"] < out["bb_lower"]
 
     out["EMASignal"] = 0
-    out.loc[above_all, "EMASignal"] = 2
-    out.loc[below_all, "EMASignal"] = 1
+    out.loc[cross_up, "EMASignal"] = 2
+    out.loc[cross_down, "EMASignal"] = 1
 
-    buy = (out["EMASignal"] == 2) & (out["bbilband"] == 1)
-    sell = (out["EMASignal"] == 1) & (out["bbihband"] == 1)
+    buy = (out["EMASignal"] == 2) & price_above_upper
+    sell = (out["EMASignal"] == 1) & price_below_lower
     out["TotalSignal"] = 0
     out.loc[buy, "TotalSignal"] = 2
     out.loc[sell, "TotalSignal"] = 1

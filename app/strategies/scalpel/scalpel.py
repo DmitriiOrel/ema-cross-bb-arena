@@ -144,6 +144,8 @@ class ScalpelStrategy(BaseStrategy):
                 bbands.bollinger_lband_indicator(),
             ]
         )
+        df["bb_upper"] = bbands.bollinger_hband()
+        df["bb_lower"] = bbands.bollinger_lband()
         df["VWAP"] = VolumeWeightedAveragePrice(
             high=df["High"],
             low=df["Low"],
@@ -167,25 +169,18 @@ class ScalpelStrategy(BaseStrategy):
         return df
 
     async def add_signal(self, df: DataFrame):
-        above = df["EMA_fast"] > df["EMA_slow"]
-        below = df["EMA_fast"] < df["EMA_slow"]
-        above_all = (
-            above.rolling(window=self.config.backcandles)
-            .apply(lambda x: x.all(), raw=True)
-            .fillna(0)
-            .astype(bool)
-        )
-        below_all = (
-            below.rolling(window=self.config.backcandles)
-            .apply(lambda x: x.all(), raw=True)
-            .fillna(0)
-            .astype(bool)
-        )
+        prev_fast = df["EMA_fast"].shift(1)
+        prev_slow = df["EMA_slow"].shift(1)
+        cross_up = (prev_fast <= prev_slow) & (df["EMA_fast"] > df["EMA_slow"])
+        cross_down = (prev_fast >= prev_slow) & (df["EMA_fast"] < df["EMA_slow"])
+        price_above_upper = df["Close"] > df["bb_upper"]
+        price_below_lower = df["Close"] < df["bb_lower"]
+
         df["EMASignal"] = 0
-        df.loc[above_all, "EMASignal"] = 2
-        df.loc[below_all, "EMASignal"] = 1
-        condition_buy = (df["EMASignal"] == 2) & (df["bbilband"])
-        condition_sell = (df["EMASignal"] == 1) & (df["bbihband"])
+        df.loc[cross_up, "EMASignal"] = 2
+        df.loc[cross_down, "EMASignal"] = 1
+        condition_buy = (df["EMASignal"] == 2) & price_above_upper
+        condition_sell = (df["EMASignal"] == 1) & price_below_lower
         df["TotalSignal"] = 0
         df.loc[condition_buy, "TotalSignal"] = 2
         df.loc[condition_sell, "TotalSignal"] = 1

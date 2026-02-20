@@ -11,7 +11,7 @@ param(
     [int]$TimeframeMin,
     [string]$Name,
     [string]$GitHubOwner = "DmitriiOrel",
-    [string]$GitHubRepo = "marketlab-arena",
+    [string]$GitHubRepo = "ema-cross-bb-arena",
     [string]$GitHubPath = "reports/leaderboard.json",
     [string]$GitHubToken = "",
     [int]$DaysBack = 365,
