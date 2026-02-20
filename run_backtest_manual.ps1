@@ -118,7 +118,7 @@ Write-Host "Running backtest (3 years) and updating GitHub leaderboard..."
 Invoke-External -Executable $pythonExe -Arguments $argsList -StepName "Manual backtest + leaderboard update"
 
 if (-not $NoChartOpen) {
-    $plotPath = Join-Path $PSScriptRoot "reports\scalpel_backtest_plot.png"
+    $plotPath = Join-Path $PSScriptRoot "reports\scalpel_backtest_indicators_1y.png"
     if (Test-Path $plotPath) {
         Start-Process $plotPath | Out-Null
     }

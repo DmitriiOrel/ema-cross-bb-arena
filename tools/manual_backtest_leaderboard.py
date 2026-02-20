@@ -350,21 +350,63 @@ def run_backtest(df: pd.DataFrame, initial_capital: float, stop_loss_percent: fl
     )
 
 
-def build_plot(result: BacktestResult, figi: str, params_text: str, output_path: Path) -> None:
+def build_plot_three_year(result: BacktestResult, figi: str, params_text: str, output_path: Path) -> None:
+    df_plot = result.df.copy()
+    df_plot["Time"] = pd.to_datetime(df_plot["Time"], utc=True, errors="coerce")
+    df_plot = df_plot.dropna(subset=["Time"]).sort_values("Time")
+    if df_plot.empty:
+        raise ValueError("Нет данных для построения 3-летнего графика.")
+    df_plot["TimePlot"] = df_plot["Time"].dt.tz_convert(None)
+
+    def _to_local_points(points: list[tuple[pd.Timestamp, float]]) -> list[tuple[pd.Timestamp, float]]:
+        out: list[tuple[pd.Timestamp, float]] = []
+        for ts, price in points:
+            ts_utc = pd.to_datetime(ts, utc=True, errors="coerce")
+            if pd.notna(ts_utc):
+                out.append((ts_utc.tz_convert(None), float(price)))
+        return out
+
+    entries = _to_local_points(result.entries)
+    exits = _to_local_points(result.exits)
+    buy_signals = df_plot[df_plot["TotalSignal"] == 2]
+    sell_signals = df_plot[df_plot["TotalSignal"] == 1]
+
     fig, (ax_price, ax_equity) = plt.subplots(
         2, 1, figsize=(18, 10), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
     )
 
-    ax_price.plot(result.df["Time"], result.df["Close"], label=f"{figi} Close")
-    if result.entries:
-        et, ep = zip(*result.entries)
-        ax_price.scatter(et, ep, marker="^", color="green", s=80, label="Buy")
-    if result.exits:
-        xt, xp = zip(*result.exits)
-        ax_price.scatter(xt, xp, marker="v", color="red", s=80, label="Sell/Exit")
+    ax_price.plot(df_plot["TimePlot"], df_plot["Close"], color="#111827", linewidth=1.2, label=f"{figi} Close")
+    if not buy_signals.empty:
+        ax_price.scatter(
+            buy_signals["TimePlot"],
+            buy_signals["Close"],
+            marker="o",
+            facecolors="none",
+            edgecolors="#16a34a",
+            s=24,
+            linewidths=1.0,
+            label="Buy signal",
+        )
+    if not sell_signals.empty:
+        ax_price.scatter(
+            sell_signals["TimePlot"],
+            sell_signals["Close"],
+            marker="o",
+            facecolors="none",
+            edgecolors="#dc2626",
+            s=24,
+            linewidths=1.0,
+            label="Sell signal",
+        )
+    if entries:
+        et, ep = zip(*entries)
+        ax_price.scatter(et, ep, marker="^", color="green", s=70, label="Buy")
+    if exits:
+        xt, xp = zip(*exits)
+        ax_price.scatter(xt, xp, marker="v", color="red", s=70, label="Sell/Exit")
     ax_price.set_title(
         (
-            f"Manual Backtest | {params_text} | "
+            f"Manual Backtest (full period) | {params_text} | "
             f"CAGR {result.metrics['cagr']*100:.2f}% | "
             f"Max DD {result.metrics['max_drawdown']*100:.2f}% | "
             f"Trades {result.metrics['number_of_trades']}"
@@ -375,7 +417,117 @@ def build_plot(result: BacktestResult, figi: str, params_text: str, output_path:
     ax_price.legend(loc="upper left")
 
     eq_norm = result.equity / result.equity.iloc[0]
-    ax_equity.plot(eq_norm.index, eq_norm.values, color="#1f77b4")
+    if getattr(eq_norm.index, "tz", None) is not None:
+        eq_x = eq_norm.index.tz_convert(None)
+    else:
+        eq_x = eq_norm.index
+    ax_equity.plot(eq_x, eq_norm.values, color="#1f77b4")
+    ax_equity.set_ylabel("Equity (x)")
+    ax_equity.set_xlabel("Time")
+    ax_equity.grid(True, alpha=0.2)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=170)
+    plt.close(fig)
+
+
+def build_plot(result: BacktestResult, figi: str, params_text: str, output_path: Path) -> None:
+    df_plot = result.df.copy()
+    df_plot["Time"] = pd.to_datetime(df_plot["Time"], utc=True, errors="coerce")
+    df_plot = df_plot.dropna(subset=["Time"]).sort_values("Time")
+    if df_plot.empty:
+        raise ValueError("Нет данных для построения графика.")
+
+    plot_end = df_plot["Time"].max()
+    plot_start = plot_end - pd.Timedelta(days=365)
+    year_df = df_plot[df_plot["Time"] >= plot_start].copy()
+    if year_df.empty:
+        year_df = df_plot.copy()
+        plot_start = year_df["Time"].min()
+    year_df["TimePlot"] = year_df["Time"].dt.tz_convert(None)
+
+    equity_plot = result.equity.copy()
+    equity_plot.index = pd.to_datetime(equity_plot.index, utc=True, errors="coerce")
+    equity_plot = equity_plot[equity_plot.index >= plot_start]
+    if equity_plot.empty:
+        equity_plot = result.equity.copy()
+
+    def _filter_points(points: list[tuple[pd.Timestamp, float]]) -> list[tuple[pd.Timestamp, float]]:
+        filtered: list[tuple[pd.Timestamp, float]] = []
+        for ts, price in points:
+            ts_utc = pd.to_datetime(ts, utc=True, errors="coerce")
+            if pd.notna(ts_utc) and ts_utc >= plot_start:
+                filtered.append((ts_utc.tz_convert(None), float(price)))
+        return filtered
+
+    year_entries = _filter_points(result.entries)
+    year_exits = _filter_points(result.exits)
+    buy_signals = year_df[year_df["TotalSignal"] == 2]
+    sell_signals = year_df[year_df["TotalSignal"] == 1]
+
+    fig, (ax_price, ax_equity) = plt.subplots(
+        2, 1, figsize=(18, 10), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+    )
+
+    ax_price.plot(year_df["TimePlot"], year_df["Close"], color="#111827", linewidth=1.4, label=f"{figi} Close")
+    ax_price.plot(year_df["TimePlot"], year_df["EMA_fast"], color="#f59e0b", linewidth=1.2, label="EMA fast")
+    ax_price.plot(year_df["TimePlot"], year_df["EMA_slow"], color="#2563eb", linewidth=1.2, label="EMA slow")
+    ax_price.plot(year_df["TimePlot"], year_df["bb_upper"], color="#10b981", linestyle="--", linewidth=1.1, label="BB upper")
+    ax_price.plot(year_df["TimePlot"], year_df["bb_lower"], color="#ef4444", linestyle="--", linewidth=1.1, label="BB lower")
+    ax_price.fill_between(
+        year_df["TimePlot"].values,
+        year_df["bb_lower"].values,
+        year_df["bb_upper"].values,
+        color="#60a5fa",
+        alpha=0.08,
+        label="Bollinger band",
+    )
+    if not buy_signals.empty:
+        ax_price.scatter(
+            buy_signals["TimePlot"],
+            buy_signals["Close"],
+            marker="o",
+            facecolors="none",
+            edgecolors="#16a34a",
+            s=34,
+            linewidths=1.1,
+            label="Buy signal",
+        )
+    if not sell_signals.empty:
+        ax_price.scatter(
+            sell_signals["TimePlot"],
+            sell_signals["Close"],
+            marker="o",
+            facecolors="none",
+            edgecolors="#dc2626",
+            s=34,
+            linewidths=1.1,
+            label="Sell signal",
+        )
+    if year_entries:
+        et, ep = zip(*year_entries)
+        ax_price.scatter(et, ep, marker="^", color="green", s=80, label="Buy")
+    if year_exits:
+        xt, xp = zip(*year_exits)
+        ax_price.scatter(xt, xp, marker="v", color="red", s=80, label="Sell/Exit")
+    ax_price.set_title(
+        (
+            f"Manual Backtest (last 365 days on chart) | {params_text} | "
+            f"CAGR {result.metrics['cagr']*100:.2f}% | "
+            f"Max DD {result.metrics['max_drawdown']*100:.2f}% | "
+            f"Trades {result.metrics['number_of_trades']}"
+        )
+    )
+    ax_price.set_ylabel("Price")
+    ax_price.grid(True, alpha=0.2)
+    ax_price.legend(loc="upper left")
+
+    eq_norm = equity_plot / equity_plot.iloc[0]
+    if getattr(eq_norm.index, "tz", None) is not None:
+        eq_x = eq_norm.index.tz_convert(None)
+    else:
+        eq_x = eq_norm.index
+    ax_equity.plot(eq_x, eq_norm.values, color="#1f77b4")
     ax_equity.set_ylabel("Equity (x)")
     ax_equity.set_xlabel("Time")
     ax_equity.grid(True, alpha=0.2)
@@ -768,10 +920,14 @@ def main() -> None:
     user_dir.mkdir(parents=True, exist_ok=True)
     trial_dir.mkdir(parents=True, exist_ok=True)
 
-    unique_plot = trial_dir / "backtest.png"
-    latest_plot = output_dir / "scalpel_backtest_plot.png"
-    build_plot(result, figi=figi, params_text=params_text, output_path=unique_plot)
-    build_plot(result, figi=figi, params_text=params_text, output_path=latest_plot)
+    full_period_plot = trial_dir / "backtest.png"
+    indicators_year_plot = trial_dir / "backtest_indicators_1y.png"
+    latest_full_plot = output_dir / "scalpel_backtest_full_3y.png"
+    latest_indicators_plot = output_dir / "scalpel_backtest_indicators_1y.png"
+    build_plot_three_year(result, figi=figi, params_text=params_text, output_path=full_period_plot)
+    build_plot(result, figi=figi, params_text=params_text, output_path=indicators_year_plot)
+    build_plot_three_year(result, figi=figi, params_text=params_text, output_path=latest_full_plot)
+    build_plot(result, figi=figi, params_text=params_text, output_path=latest_indicators_plot)
 
     trades_path = trial_dir / "trades.csv"
     result.trades.to_csv(trades_path, index=False)
@@ -800,7 +956,10 @@ def main() -> None:
             "backcandles": args.backcandles,
         },
         "trial_dir": str(trial_dir),
-        "plot_png": str(unique_plot),
+        "plot_png": str(full_period_plot),
+        "plot_indicators_1y_png": str(indicators_year_plot),
+        "latest_full_3y_png": str(latest_full_plot),
+        "latest_indicators_1y_png": str(latest_indicators_plot),
         "trades_csv": str(trades_path),
     }
     summary_path = trial_dir / "summary.json"
@@ -897,7 +1056,16 @@ def main() -> None:
             branch=args.github_branch,
             token=args.github_token,
             remote_path=f"{trial_remote_root}/backtest.png",
-            local_path=unique_plot,
+            local_path=full_period_plot,
+            message=f"Добавление артефактов trial: {safe_name} {run_id}",
+        )
+        push_local_file_to_github(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            branch=args.github_branch,
+            token=args.github_token,
+            remote_path=f"{trial_remote_root}/backtest_indicators_1y.png",
+            local_path=indicators_year_plot,
             message=f"Добавление артефактов trial: {safe_name} {run_id}",
         )
         push_local_file_to_github(
@@ -1008,7 +1176,8 @@ def main() -> None:
     print(f"Количество сделок: {summary['trades']}")
     print(f"Текущий прогон сохранен в лидерборде: {'да' if current_run_kept else 'нет (оставлен прошлый лучший)'}")
     print(f"Ваше место в лидерборде: {my_place}")
-    print(f"Последний график: {latest_plot}")
+    print(f"График 3Y (локально): {latest_full_plot}")
+    print(f"График 1Y+индикаторы (локально): {latest_indicators_plot}")
     print(f"Локальное зеркало лидерборда: {args.leaderboard_path}")
     print(f"Путь README с лидербордом: {args.github_readme_path}")
     print("Публикация в GitHub: выполнена")
