@@ -133,6 +133,20 @@ class ScalpelStrategy(BaseStrategy):
 
     async def add_indicators(self):
         df = await self.create_df()
+        if df is None or df.empty:
+            return DataFrame()
+        min_required = max(
+            self.config.ema_slow_window + 1,
+            self.config.bb_window,
+            16,
+            7,
+        )
+        if len(df) < min_required:
+            logger.info(
+                f"Not enough candles for indicators/signals. "
+                f"Need >= {min_required}, got {len(df)}. figi={self.figi}"
+            )
+            return DataFrame()
         bbands = BollingerBands(
             close=df["Close"],
             window=self.config.bb_window,
@@ -326,6 +340,12 @@ class ScalpelStrategy(BaseStrategy):
             try:
                 await self.ensure_market_open()
                 df = await self.add_signal(await self.add_indicators())
+                if df is None or df.empty:
+                    logger.info(
+                        f"Skipping cycle due to insufficient indicator data. figi={self.figi}"
+                    )
+                    await asyncio.sleep(self.config.check_data)
+                    continue
                 orders = await client.get_orders(account_id=self.account_id)
                 if get_order(orders=orders.orders, figi=self.figi):
                     logger.info(

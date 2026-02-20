@@ -439,7 +439,7 @@ def build_plot(result: BacktestResult, figi: str, params_text: str, output_path:
         raise ValueError("Нет данных для построения графика.")
 
     plot_end = df_plot["Time"].max()
-    plot_start = plot_end - pd.Timedelta(days=365)
+    plot_start = plot_end - pd.Timedelta(days=30)
     year_df = df_plot[df_plot["Time"] >= plot_start].copy()
     if year_df.empty:
         year_df = df_plot.copy()
@@ -512,7 +512,7 @@ def build_plot(result: BacktestResult, figi: str, params_text: str, output_path:
         ax_price.scatter(xt, xp, marker="v", color="red", s=80, label="Sell/Exit")
     ax_price.set_title(
         (
-            f"Manual Backtest (last 365 days on chart) | {params_text} | "
+            f"Manual Backtest (last 30 days on chart) | {params_text} | "
             f"CAGR {result.metrics['cagr']*100:.2f}% | "
             f"Max DD {result.metrics['max_drawdown']*100:.2f}% | "
             f"Trades {result.metrics['number_of_trades']}"
@@ -921,11 +921,11 @@ def main() -> None:
     trial_dir.mkdir(parents=True, exist_ok=True)
 
     full_period_plot = trial_dir / "backtest.png"
-    indicators_year_plot = trial_dir / "backtest_indicators_1y.png"
+    indicators_month_plot = trial_dir / "backtest_indicators_1m.png"
     latest_full_plot = output_dir / "scalpel_backtest_full_3y.png"
-    latest_indicators_plot = output_dir / "scalpel_backtest_indicators_1y.png"
+    latest_indicators_plot = output_dir / "scalpel_backtest_indicators_1m.png"
     build_plot_three_year(result, figi=figi, params_text=params_text, output_path=full_period_plot)
-    build_plot(result, figi=figi, params_text=params_text, output_path=indicators_year_plot)
+    build_plot(result, figi=figi, params_text=params_text, output_path=indicators_month_plot)
     build_plot_three_year(result, figi=figi, params_text=params_text, output_path=latest_full_plot)
     build_plot(result, figi=figi, params_text=params_text, output_path=latest_indicators_plot)
 
@@ -957,9 +957,9 @@ def main() -> None:
         },
         "trial_dir": str(trial_dir),
         "plot_png": str(full_period_plot),
-        "plot_indicators_1y_png": str(indicators_year_plot),
+        "plot_indicators_1m_png": str(indicators_month_plot),
         "latest_full_3y_png": str(latest_full_plot),
-        "latest_indicators_1y_png": str(latest_indicators_plot),
+        "latest_indicators_1m_png": str(latest_indicators_plot),
         "trades_csv": str(trades_path),
     }
     summary_path = trial_dir / "summary.json"
@@ -1064,8 +1064,8 @@ def main() -> None:
             repo=args.github_repo,
             branch=args.github_branch,
             token=args.github_token,
-            remote_path=f"{trial_remote_root}/backtest_indicators_1y.png",
-            local_path=indicators_year_plot,
+            remote_path=f"{trial_remote_root}/backtest_indicators_1m.png",
+            local_path=indicators_month_plot,
             message=f"Добавление артефактов trial: {safe_name} {run_id}",
         )
         push_local_file_to_github(
@@ -1177,7 +1177,7 @@ def main() -> None:
     print(f"Текущий прогон сохранен в лидерборде: {'да' if current_run_kept else 'нет (оставлен прошлый лучший)'}")
     print(f"Ваше место в лидерборде: {my_place}")
     print(f"График 3Y (локально): {latest_full_plot}")
-    print(f"График 1Y+индикаторы (локально): {latest_indicators_plot}")
+    print(f"График 1M+индикаторы (локально): {latest_indicators_plot}")
     print(f"Локальное зеркало лидерборда: {args.leaderboard_path}")
     print(f"Путь README с лидербордом: {args.github_readme_path}")
     print("Публикация в GitHub: выполнена")
