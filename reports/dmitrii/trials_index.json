@@ -14,6 +14,20 @@
     "timestamp_utc": "20260219T113648Z"
   },
   {
+    "run_id": "20260220T151233Z",
+    "trial_path": "reports/dmitrii/trial_20260220T151233Z",
+    "annual_return_pct": 21.277778200784624,
+    "max_drawdown_pct": -18.11618182399135,
+    "total_return_pct": 78.30834168757875,
+    "trades": 178,
+    "ema_fast": 30,
+    "ema_slow": 40,
+    "bb_window": 20,
+    "bb_dev": 1.0,
+    "timeframe_min": 30,
+    "timestamp_utc": "20260220T151233Z"
+  },
+  {
     "run_id": "20260220T150349Z",
     "trial_path": "reports/dmitrii/trial_20260220T150349Z",
     "annual_return_pct": 15.841701699545752,
