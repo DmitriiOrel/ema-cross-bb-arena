@@ -11,11 +11,9 @@ param(
     [int]$TimeframeMin,
     [string]$Name,
     [string]$GitHubOwner = "DmitriiOrel",
-    [string]$GitHubRepo = "ema-cross-bb-arena",
+    [string]$GitHubRepo = "winter_school_project",
     [string]$GitHubPath = "reports/leaderboard.json",
     [string]$GitHubToken = "",
-    [int]$DaysBack = 365,
-    [int]$StartJitterSec = 15,
     [switch]$NoChartOpen
 )
 
@@ -78,7 +76,6 @@ $scaledDev = [int][Math]::Round($BbDev * 100)
 if (($scaledDev % 25) -ne 0) { throw "bb_dev step must be 0.25" }
 $allowedTf = @(5, 15, 30, 60, 120, 240, 720, 1440)
 if ($TimeframeMin -notin $allowedTf) { throw "timeframe_min must be one of: 5, 15, 30, 60, 120, 240, 720, 1440" }
-if ($DaysBack -lt 30) { throw "DaysBack must be >= 30" }
 
 if ([string]::IsNullOrWhiteSpace($GitHubToken) -and -not [string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
     $GitHubToken = $env:GITHUB_TOKEN
@@ -98,11 +95,6 @@ if (-not (Test-Path ".env")) {
 $env:PYTHONPATH = "."
 $env:PYTHONDONTWRITEBYTECODE = "1"
 Clear-NetworkEnv
-if ($StartJitterSec -gt 0) {
-    $sleepSec = Get-Random -Minimum 0 -Maximum ($StartJitterSec + 1)
-    Write-Host "Start jitter: sleeping $sleepSec sec to reduce API burst..."
-    Start-Sleep -Seconds $sleepSec
-}
 
 $argsList = @(
     "-u",
@@ -113,17 +105,16 @@ $argsList = @(
     "--bb-window", "$BbWindow",
     "--bb-dev", "$BbDev",
     "--timeframe-min", "$TimeframeMin",
-    "--days-back", "$DaysBack",
+    "--days-back", "1095",
     "--write-live-config",
     "--require-github",
-    "--github-mode", "dispatch",
     "--github-owner", "$GitHubOwner",
     "--github-repo", "$GitHubRepo",
     "--github-path", "$GitHubPath",
     "--github-token", "$GitHubToken"
 )
 
-Write-Host "Running backtest ($DaysBack days) and submitting result to GitHub leaderboard queue..."
+Write-Host "Running backtest (3 years) and updating GitHub leaderboard..."
 Invoke-External -Executable $pythonExe -Arguments $argsList -StepName "Manual backtest + leaderboard update"
 
 if (-not $NoChartOpen) {

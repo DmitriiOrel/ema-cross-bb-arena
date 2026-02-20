@@ -4,8 +4,7 @@ __pycache__/
 *.pyc
 .env
 market_data_cache/
-reports/*
-!reports/leaderboard.json
+reports/
 stats.db
 .idea/
 .vscode/

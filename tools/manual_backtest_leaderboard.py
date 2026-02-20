@@ -74,8 +74,6 @@ README_LB_END = "<!-- LEADERBOARD:END -->"
 GITHUB_TIMEOUT_SEC = 90
 GITHUB_MAX_RETRIES = 5
 GITHUB_RETRY_BASE_SEC = 2.0
-TINVEST_MAX_RETRIES = 4
-TINVEST_RETRY_BASE_SEC = 2.0
 
 
 @dataclass
@@ -112,9 +110,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--github-branch", default="main")
     parser.add_argument("--github-token", default="")
     parser.add_argument("--require-github", action="store_true")
-    parser.add_argument("--github-mode", choices=["dispatch", "direct"], default="dispatch")
-    parser.add_argument("--github-dispatch-event", default="backtest_submission")
-    parser.add_argument("--artifacts-github", action="store_true")
     parser.add_argument("--table-limit", type=int, default=20)
     parser.add_argument("--readme-table-limit", type=int, default=10)
     return parser.parse_args()
@@ -168,44 +163,29 @@ def fetch_candles(figi: str, days_back: int, timeframe_min: int) -> pd.DataFrame
         flush=True,
     )
 
-    rows: list[dict] = []
-    last_error: Optional[Exception] = None
-    for attempt in range(1, TINVEST_MAX_RETRIES + 1):
-        rows = []
-        try:
-            with Client(settings.token, target=target) as client:
-                for candle in client.get_all_candles(
-                    figi=figi,
-                    from_=now() - timedelta(days=days_back),
-                    to=now(),
-                    interval=interval,
-                ):
-                    rows.append(
-                        {
-                            "Time": candle.time,
-                            "Open": quotation_to_float(candle.open),
-                            "High": quotation_to_float(candle.high),
-                            "Low": quotation_to_float(candle.low),
-                            "Close": quotation_to_float(candle.close),
-                            "Volume": candle.volume,
-                        }
-                    )
-                    if len(rows) % 2000 == 0:
-                        print(f"Loaded candles: {len(rows)}", flush=True)
-            if rows:
-                break
-            raise ValueError("API did not return candles for selected parameters")
-        except Exception as ex:
-            last_error = ex
-            if attempt < TINVEST_MAX_RETRIES:
-                sleep_s = TINVEST_RETRY_BASE_SEC * attempt
-                print(
-                    f"[T-Invest] retry {attempt}/{TINVEST_MAX_RETRIES} in {sleep_s:.1f}s: {type(ex).__name__}: {ex}",
-                    flush=True,
-                )
-                time.sleep(sleep_s)
-                continue
-            raise RuntimeError(f"T-Invest candle load failed: {last_error}") from ex
+    rows = []
+    with Client(settings.token, target=target) as client:
+        for candle in client.get_all_candles(
+            figi=figi,
+            from_=now() - timedelta(days=days_back),
+            to=now(),
+            interval=interval,
+        ):
+            rows.append(
+                {
+                    "Time": candle.time,
+                    "Open": quotation_to_float(candle.open),
+                    "High": quotation_to_float(candle.high),
+                    "Low": quotation_to_float(candle.low),
+                    "Close": quotation_to_float(candle.close),
+                    "Volume": candle.volume,
+                }
+            )
+            if len(rows) % 2000 == 0:
+                print(f"Загружено свечей: {len(rows)}", flush=True)
+
+    if not rows:
+        raise ValueError("API не вернул свечи по заданным параметрам")
 
     df = pd.DataFrame(rows)
     df = df[df["High"] != df["Low"]].copy()
@@ -247,19 +227,15 @@ def add_signals(df: pd.DataFrame, ema_fast: int, ema_slow: int, bb_window: int, 
     out["bb_upper"] = bbands.bollinger_hband()
     out["bb_lower"] = bbands.bollinger_lband()
 
-    prev_fast = out["EMA_fast"].shift(1)
-    prev_slow = out["EMA_slow"].shift(1)
-    cross_up = (prev_fast <= prev_slow) & (out["EMA_fast"] > out["EMA_slow"])
-    cross_down = (prev_fast >= prev_slow) & (out["EMA_fast"] < out["EMA_slow"])
-    price_above_upper = out["Close"] > out["bb_upper"]
-    price_below_lower = out["Close"] < out["bb_lower"]
+    cross_up = (out["EMA_fast"].shift(1) <= out["EMA_slow"].shift(1)) & (out["EMA_fast"] > out["EMA_slow"])
+    cross_down = (out["EMA_fast"].shift(1) >= out["EMA_slow"].shift(1)) & (out["EMA_fast"] < out["EMA_slow"])
 
     out["EMASignal"] = 0
     out.loc[cross_up, "EMASignal"] = 2
     out.loc[cross_down, "EMASignal"] = 1
 
-    buy = (out["EMASignal"] == 2) & price_above_upper
-    sell = (out["EMASignal"] == 1) & price_below_lower
+    buy = cross_up & (out["Close"] > out["bb_upper"])
+    sell = cross_down & (out["Close"] < out["bb_lower"])
     out["TotalSignal"] = 0
     out.loc[buy, "TotalSignal"] = 2
     out.loc[sell, "TotalSignal"] = 1
@@ -623,27 +599,6 @@ def push_remote_leaderboard(owner: str, repo: str, path: str, branch: str, token
     )
 
 
-def dispatch_github_event(owner: str, repo: str, token: str, event_type: str, client_payload: dict) -> None:
-    url = f"https://api.github.com/repos/{owner}/{repo}/dispatches"
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {token}",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "winter-school-backtest-script",
-        "Content-Type": "application/json",
-    }
-    body = {
-        "event_type": event_type,
-        "client_payload": client_payload,
-    }
-    github_api_request(
-        url=url,
-        method="POST",
-        headers=headers,
-        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-    )
-
-
 def delete_remote_file(owner: str, repo: str, path: str, branch: str, token: str, sha: str, message: str) -> None:
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{quote(path)}"
     body = {
@@ -870,120 +825,160 @@ def main() -> None:
     }
 
     try:
-        if args.github_mode == "dispatch":
-            dispatch_payload = {
-                "record": record,
-                "summary": summary,
-                "generated_utc": run_id,
-            }
-            dispatch_github_event(
+        remote_df, remote_sha = fetch_remote_leaderboard(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path=args.github_path,
+            branch=args.github_branch,
+            token=args.github_token,
+        )
+        if remote_df.empty and args.github_path.endswith(".json"):
+            legacy_text, _ = fetch_remote_text_file(
                 owner=args.github_owner,
                 repo=args.github_repo,
+                path="reports/leaderboard.csv",
+                branch=args.github_branch,
                 token=args.github_token,
-                event_type=args.github_dispatch_event,
-                client_payload=dispatch_payload,
             )
-            local_df = load_local_leaderboard(args.leaderboard_path)
-            if local_df.empty:
-                merged = pd.DataFrame([record], columns=LEADERBOARD_COLUMNS)
-            else:
-                merged = pd.concat([local_df, pd.DataFrame([record])], ignore_index=True)
-            ranked = rank_leaderboard(merged)
+            if legacy_text.strip():
+                try:
+                    remote_df = ensure_leaderboard_columns(pd.read_csv(io.StringIO(legacy_text)))
+                except Exception:
+                    remote_df = empty_leaderboard()
+        remote_df = ensure_leaderboard_columns(remote_df)
+        if remote_df.empty:
+            merged = pd.DataFrame([record], columns=LEADERBOARD_COLUMNS)
         else:
-            remote_df, remote_sha = fetch_remote_leaderboard(
+            merged = pd.concat([remote_df, pd.DataFrame([record])], ignore_index=True)
+        ranked = rank_leaderboard(merged)
+        push_remote_leaderboard(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path=args.github_path,
+            branch=args.github_branch,
+            token=args.github_token,
+            df=ranked,
+            sha=remote_sha,
+            message=f"Обновление лидерборда: {safe_name} {run_id}",
+        )
+
+        # Миграция: удаляем устаревший CSV-лидерборд, если он существует в репозитории.
+        _, legacy_csv_sha = fetch_remote_file_bytes(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path="reports/leaderboard.csv",
+            branch=args.github_branch,
+            token=args.github_token,
+        )
+        if legacy_csv_sha:
+            delete_remote_file(
                 owner=args.github_owner,
                 repo=args.github_repo,
-                path=args.github_path,
+                path="reports/leaderboard.csv",
                 branch=args.github_branch,
                 token=args.github_token,
-            )
-            if remote_df.empty and args.github_path.endswith(".json"):
-                legacy_text, _ = fetch_remote_text_file(
-                    owner=args.github_owner,
-                    repo=args.github_repo,
-                    path="reports/leaderboard.csv",
-                    branch=args.github_branch,
-                    token=args.github_token,
-                )
-                if legacy_text.strip():
-                    try:
-                        remote_df = ensure_leaderboard_columns(pd.read_csv(io.StringIO(legacy_text)))
-                    except Exception:
-                        remote_df = empty_leaderboard()
-            remote_df = ensure_leaderboard_columns(remote_df)
-            if remote_df.empty:
-                merged = pd.DataFrame([record], columns=LEADERBOARD_COLUMNS)
-            else:
-                merged = pd.concat([remote_df, pd.DataFrame([record])], ignore_index=True)
-            ranked = rank_leaderboard(merged)
-            push_remote_leaderboard(
-                owner=args.github_owner,
-                repo=args.github_repo,
-                path=args.github_path,
-                branch=args.github_branch,
-                token=args.github_token,
-                df=ranked,
-                sha=remote_sha,
-                message=f"Leaderboard update: {safe_name} {run_id}",
+                sha=legacy_csv_sha,
+                message="Удаление устаревшего файла reports/leaderboard.csv",
             )
 
-            readme_text, readme_sha = fetch_remote_text_file(
+        trial_remote_root = f"reports/{safe_name}/trial_{run_id}"
+        push_local_file_to_github(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            branch=args.github_branch,
+            token=args.github_token,
+            remote_path=f"{trial_remote_root}/summary.json",
+            local_path=summary_path,
+            message=f"Добавление артефактов trial: {safe_name} {run_id}",
+        )
+        push_local_file_to_github(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            branch=args.github_branch,
+            token=args.github_token,
+            remote_path=f"{trial_remote_root}/backtest.png",
+            local_path=unique_plot,
+            message=f"Добавление артефактов trial: {safe_name} {run_id}",
+        )
+        push_local_file_to_github(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            branch=args.github_branch,
+            token=args.github_token,
+            remote_path=f"{trial_remote_root}/trades.csv",
+            local_path=trades_path,
+            message=f"Добавление артефактов trial: {safe_name} {run_id}",
+        )
+
+        index_path_remote = f"reports/{safe_name}/trials_index.json"
+        index_text, index_sha = fetch_remote_text_file(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path=index_path_remote,
+            branch=args.github_branch,
+            token=args.github_token,
+        )
+        index_rows = load_trials_index(index_text)
+        index_rows.append(
+            {
+                "run_id": run_id,
+                "trial_path": trial_remote_root,
+                "annual_return_pct": summary["annual_return_pct"],
+                "max_drawdown_pct": summary["max_drawdown_pct"],
+                "total_return_pct": summary["total_return_pct"],
+                "trades": summary["trades"],
+                "ema_fast": args.ema_fast,
+                "ema_slow": args.ema_slow,
+                "bb_window": args.bb_window,
+                "bb_dev": args.bb_dev,
+                "timeframe_min": args.timeframe_min,
+                "timestamp_utc": run_id,
+            }
+        )
+        index_rows = sort_trials_index(index_rows)
+        (user_dir / "trials_index.json").write_text(
+            json.dumps(index_rows, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        push_remote_text_file(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path=index_path_remote,
+            branch=args.github_branch,
+            token=args.github_token,
+            text=json.dumps(index_rows, ensure_ascii=False, indent=2) + "\n",
+            sha=index_sha,
+            message=f"Обновление индекса trial: {safe_name} {run_id}",
+        )
+
+        readme_text, readme_sha = fetch_remote_text_file(
+            owner=args.github_owner,
+            repo=args.github_repo,
+            path=args.github_readme_path,
+            branch=args.github_branch,
+            token=args.github_token,
+        )
+        leaderboard_block = render_readme_leaderboard(
+            df=ranked,
+            table_limit=args.readme_table_limit,
+            generated_utc=run_id,
+        )
+        updated_readme = inject_readme_leaderboard(readme_text=readme_text, leaderboard_block=leaderboard_block)
+        if updated_readme != readme_text:
+            push_remote_text_file(
                 owner=args.github_owner,
                 repo=args.github_repo,
                 path=args.github_readme_path,
                 branch=args.github_branch,
                 token=args.github_token,
+                text=updated_readme,
+                sha=readme_sha,
+                message=f"Обновление README-лидерборда: {safe_name} {run_id}",
             )
-            leaderboard_block = render_readme_leaderboard(
-                df=ranked,
-                table_limit=args.readme_table_limit,
-                generated_utc=run_id,
-            )
-            updated_readme = inject_readme_leaderboard(readme_text=readme_text, leaderboard_block=leaderboard_block)
-            if updated_readme != readme_text:
-                push_remote_text_file(
-                    owner=args.github_owner,
-                    repo=args.github_repo,
-                    path=args.github_readme_path,
-                    branch=args.github_branch,
-                    token=args.github_token,
-                    text=updated_readme,
-                    sha=readme_sha,
-                    message=f"README leaderboard update: {safe_name} {run_id}",
-                )
-
-            if args.artifacts_github:
-                trial_remote_root = f"reports/{safe_name}/trial_{run_id}"
-                push_local_file_to_github(
-                    owner=args.github_owner,
-                    repo=args.github_repo,
-                    branch=args.github_branch,
-                    token=args.github_token,
-                    remote_path=f"{trial_remote_root}/summary.json",
-                    local_path=summary_path,
-                    message=f"Trial artifacts upload: {safe_name} {run_id}",
-                )
-                push_local_file_to_github(
-                    owner=args.github_owner,
-                    repo=args.github_repo,
-                    branch=args.github_branch,
-                    token=args.github_token,
-                    remote_path=f"{trial_remote_root}/backtest.png",
-                    local_path=unique_plot,
-                    message=f"Trial artifacts upload: {safe_name} {run_id}",
-                )
-                push_local_file_to_github(
-                    owner=args.github_owner,
-                    repo=args.github_repo,
-                    branch=args.github_branch,
-                    token=args.github_token,
-                    remote_path=f"{trial_remote_root}/trades.csv",
-                    local_path=trades_path,
-                    message=f"Trial artifacts upload: {safe_name} {run_id}",
-                )
     except Exception as ex:
-        raise RuntimeError(f"GitHub update failed: {ex}") from ex
+        raise RuntimeError(f"Ошибка обновления данных в GitHub: {ex}") from ex
 
+    # Локальное зеркало для удобства, источник истины - GitHub.
     save_local_leaderboard(ranked, args.leaderboard_path)
 
     current_run_kept = not ranked[ranked["run_id"] == run_id].empty

@@ -1,0 +1,16 @@
+[
+  {
+    "run_id": "20260219T113648Z",
+    "trial_path": "reports/dmitrii/trial_20260219T113648Z",
+    "annual_return_pct": 39.49553276634952,
+    "max_drawdown_pct": -11.834532895509698,
+    "total_return_pct": 171.25894060259034,
+    "trades": 81,
+    "ema_fast": 30,
+    "ema_slow": 40,
+    "bb_window": 20,
+    "bb_dev": 1.0,
+    "timeframe_min": 60,
+    "timestamp_utc": "20260219T113648Z"
+  }
+]
