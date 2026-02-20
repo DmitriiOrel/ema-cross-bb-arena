@@ -177,6 +177,15 @@ class ScalpelStrategy(BaseStrategy):
         return df
 
     async def add_signal(self, df: DataFrame):
+        if df is None or df.empty:
+            return DataFrame()
+        required_cols = {"EMA_fast", "EMA_slow", "bb_upper", "bb_lower", "Close"}
+        if not required_cols.issubset(set(df.columns)):
+            logger.info(
+                f"Indicator columns are incomplete, skipping signal calculation. "
+                f"Missing={sorted(required_cols - set(df.columns))}. figi={self.figi}"
+            )
+            return DataFrame()
         df["EMASignal"] = 0
         cross_up = (df["EMA_fast"].shift(1) <= df["EMA_slow"].shift(1)) & (
             df["EMA_fast"] > df["EMA_slow"]
@@ -339,10 +348,17 @@ class ScalpelStrategy(BaseStrategy):
         while True:
             try:
                 await self.ensure_market_open()
-                df = await self.add_signal(await self.add_indicators())
-                if df is None or df.empty:
+                indicators_df = await self.add_indicators()
+                if indicators_df is None or indicators_df.empty:
                     logger.info(
                         f"Skipping cycle due to insufficient indicator data. figi={self.figi}"
+                    )
+                    await asyncio.sleep(self.config.check_data)
+                    continue
+                df = await self.add_signal(indicators_df)
+                if df is None or df.empty:
+                    logger.info(
+                        f"Skipping cycle due to missing signal inputs. figi={self.figi}"
                     )
                     await asyncio.sleep(self.config.check_data)
                     continue
@@ -369,6 +385,8 @@ class ScalpelStrategy(BaseStrategy):
                     logger.info(f"No signal. figi={self.figi}")
             except AioRequestError as er:
                 logger.error(f"Error in main cycle. Stopping strategy. {er}")
+            except Exception as er:
+                logger.exception(f"Unexpected error in main cycle. figi={self.figi}. {er}")
             await asyncio.sleep(self.config.check_data)
 
     async def start(self):
