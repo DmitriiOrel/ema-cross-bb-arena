@@ -1,0 +1,27 @@
+{
+  "run_id": "20260220T151233Z",
+  "name": "dmitrii",
+  "figi": "BBG004730N88",
+  "days_back": 1095,
+  "timeframe_min": 30,
+  "ema_fast": 30,
+  "ema_slow": 40,
+  "bb_window": 20,
+  "bb_dev": 1.0,
+  "annual_return_pct": 21.277778200784624,
+  "total_return_pct": 78.30834168757875,
+  "max_drawdown_pct": -18.11618182399135,
+  "trades": 178,
+  "win_rate_pct": 35.95505617977528,
+  "strategy_params": {
+    "ema_fast": 30,
+    "ema_slow": 40,
+    "bb_window": 20,
+    "bb_dev": 1.0,
+    "timeframe_min": 30,
+    "backcandles": 15
+  },
+  "trial_dir": "reports\\dmitrii\\trial_20260220T151233Z",
+  "plot_png": "reports\\dmitrii\\trial_20260220T151233Z\\backtest.png",
+  "trades_csv": "reports\\dmitrii\\trial_20260220T151233Z\\trades.csv"
+}
